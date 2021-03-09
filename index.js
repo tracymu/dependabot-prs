@@ -20,24 +20,28 @@ async function getPullsForRepo(repo) {
     state: 'open',
   })
 
-  return (await Promise.all(pulls.map(async ({ head, number, labels, title, html_url: url }) => {
+  return (await Promise.all(pulls.map(async ({ number, labels, title, html_url: url }) => {
     if (!labels.find((label) => label.name === 'dependencies')) return
-    const { data: { check_runs: checks } } = await octokit.checks.listForRef({
+
+    const { data: { mergeable_state } } = await octokit.pulls.get({
       owner: 'blake-education',
       repo,
-      ref: head.ref,
+      pull_number: number
     })
-    return { repo, number, labels, title, url, checks }
+
+    return { repo, number, labels, title, url, mergeable_state }
   }))).flat().filter(Boolean)
 }
 
 ;(async function () {
   const pulls = (await Promise.all(repos.map(getPullsForRepo))).flat()
 
-  for (const { repo, number, labels, title, url, checks } of pulls) {
-    const checksCompleted = checks.every(({ status }) => status === 'completed')
-    const checksSuccess = checksCompleted && checks.every(({ conclusion }) => conclusion === 'success')
-    const dotColor = checksCompleted ? (checksSuccess ? 'green' : 'red') : 'orange'
+  for (const { repo, number, labels, title, url, mergeable_state } of pulls) {
+    const dotColor = {
+      clean: 'green',
+      dirty: 'green',
+      blocked: 'red',
+    }[mergeable_state] ?? 'orange'
 
     const labelText = labels.map((label) => {
       const bgColor = `#${label.color}`
