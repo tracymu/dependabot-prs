@@ -7,6 +7,7 @@ const contrast = require('contrast')
 // https://github.com/settings/tokens
 const { DEPENDABOT_PRS_GITHUB_TOKEN, DEPENDABOT_PRS_REPOS = "" } = process.env
 
+const owner = 'blake-education'
 const repos = DEPENDABOT_PRS_REPOS.split(/\s+/).map(repo => repo.trim())
 
 const octokit = new Octokit({
@@ -15,7 +16,7 @@ const octokit = new Octokit({
 
 async function getPullsForRepo(repo) {
   const { data: pulls } = await octokit.pulls.list({
-    owner: 'blake-education',
+    owner,
     repo,
     state: 'open',
   })
@@ -23,25 +24,21 @@ async function getPullsForRepo(repo) {
   return (await Promise.all(pulls.map(async ({ number, labels, title, html_url: url }) => {
     if (!labels.find((label) => label.name === 'dependencies')) return
 
-    const { data: { mergeable_state } } = await octokit.pulls.get({
-      owner: 'blake-education',
+    const { data: { mergeable, mergeable_state } } = await octokit.pulls.get({
+      owner,
       repo,
       pull_number: number
     })
 
-    return { repo, number, labels, title, url, mergeable_state }
+    return { repo, number, labels, title, url, mergeable, mergeable_state }
   }))).flat().filter(Boolean)
 }
 
 ;(async function () {
   const pulls = (await Promise.all(repos.map(getPullsForRepo))).flat()
 
-  for (const { repo, number, labels, title, url, mergeable_state } of pulls) {
-    const dotColor = {
-      clean: 'green',
-      dirty: 'green',
-      blocked: 'red',
-    }[mergeable_state] ?? 'orange'
+  for (const { repo, number, labels, title, url, mergeable } of pulls) {
+    const dotColor = mergeable ? 'green' : (mergeable === false ? 'red' : 'orange')
 
     const labelText = labels.map((label) => {
       const bgColor = `#${label.color}`
