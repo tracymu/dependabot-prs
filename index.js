@@ -21,24 +21,29 @@ async function getPullsForRepo(repo) {
     state: 'open',
   })
 
-  return (await Promise.all(pulls.map(async ({ number, labels, title, html_url: url }) => {
+  return (await Promise.all(pulls.map(async ({ head: { sha }, number, labels, title, html_url: url }) => {
     if (!labels.find((label) => label.name === 'dependencies')) return
 
-    const { data: { mergeable, mergeable_state } } = await octokit.pulls.get({
+    const { data: { state } } = await octokit.repos.getCombinedStatusForRef({
       owner,
       repo,
-      pull_number: number
+      ref: sha,
     })
 
-    return { repo, number, labels, title, url, mergeable, mergeable_state }
+    return { repo, number, labels, title, url, state }
   }))).flat().filter(Boolean)
 }
 
 ;(async function () {
   const pulls = (await Promise.all(repos.map(getPullsForRepo))).flat()
 
-  for (const { repo, number, labels, title, url, mergeable } of pulls) {
-    const dotColor = mergeable ? 'green' : (mergeable === false ? 'red' : 'orange')
+  for (const { repo, number, labels, title, url, state } of pulls) {
+    console.log(state)
+    const dotColor = {
+      error: 'red',
+      failure: 'red',
+      success: 'green',
+    }[state] ?? 'orange'
 
     const labelText = labels.map((label) => {
       const bgColor = `#${label.color}`
