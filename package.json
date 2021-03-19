@@ -13,6 +13,8 @@
   "dependencies": {
     "@octokit/rest": "^18.0.12",
     "chalk": "^4.1.0",
-    "contrast": "^1.0.1"
+    "contrast": "^1.0.1",
+    "prompts": "^2.4.0",
+    "yargs": "^16.2.0"
   }
 }
