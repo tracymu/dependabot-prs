@@ -118,6 +118,7 @@ async function approvePR({ repo, number }) {
     pull_number: number,
     commit_id: pull.sha,
     event: 'APPROVE',
+    body: "@dependabot merge",
   })
 
   console.log(`#${number} approved`)
