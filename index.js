@@ -22,7 +22,7 @@ function isDependabotPR({ labels }) {
 }
 
 async function getPull(repo, number) {
-  const { data: { head: { sha }, labels, title, html_url: url, state } } = await octokit.pulls.get({
+  const { data: { head: { sha }, labels, title, html_url: url, state, mergeable, mergeable_state } } = await octokit.pulls.get({
     owner,
     repo,
     pull_number: number,
@@ -34,7 +34,7 @@ async function getPull(repo, number) {
     ref: sha,
   })
 
-  return { repo, number, labels, title, url, state, status }
+  return { repo, number, labels, title, url, state, status, mergeable, mergeable_state }
 }
 
 async function getPullsForRepo(repo) {
@@ -47,13 +47,19 @@ async function getPullsForRepo(repo) {
   return (await Promise.all(pulls.map(async ({ head: { sha }, number, labels, title, html_url: url }) => {
     if (!isDependabotPR({ labels })) return
 
+    const { data: { mergeable, mergeable_state } } = await octokit.pulls.get({
+      owner,
+      repo,
+      pull_number: number,
+    })
+
     const { data: { state: status } } = await octokit.repos.getCombinedStatusForRef({
       owner,
       repo,
       ref: sha,
     })
 
-    return { repo, number, labels, title, url, state: 'open', status }
+    return { repo, number, labels, title, url, state: 'open', status, mergeable, mergeable_state }
   }))).flat().filter(Boolean)
 }
 
@@ -61,7 +67,7 @@ async function getPullsForRepos() {
   return (await Promise.all(repos.map(getPullsForRepo))).flat()
 }
 
-function describePR({ repo, number, labels, title, url, status }) {
+function describePR({ repo, number, labels, title, url, status, mergeable_state }) {
   const dotColor = {
     error: 'red',
     failure: 'red',
@@ -74,7 +80,14 @@ function describePR({ repo, number, labels, title, url, status }) {
     return chalk.bgHex(bgColor).keyword(color)(label.name)
   }).join(' ')
 
-  return `${chalk.blue(repo)}: ${chalk.magenta(`#${number}`)} ${chalk.bold(title)} ${chalk.keyword(dotColor)('•')} ${labelText} ${url}`
+  const mergeIcon = {
+    'behind': '↺',
+    'blocked': '✋',
+    'dirty': '🧹',
+    'clean': '✔',
+  }[mergeable_state] ?? ''
+
+  return `${chalk.blue(repo)}: ${chalk.magenta(`#${number}`)} ${chalk.bold(title)} ${chalk.keyword(dotColor)('•')} ${mergeIcon} ${labelText} ${url}`
 }
 
 async function listPRs() {
@@ -124,6 +137,24 @@ async function approvePR({ repo, number }) {
   console.log(`#${number} approved`)
 }
 
+async function rebaseBehind() {
+  const pulls = await getPullsForRepos()
+
+  for (const pull of pulls) {
+    if (pull.mergeable_state === 'behind') {
+      console.log('rebasing', describePR(pull))
+      await octokit.pulls.createReview({
+        owner,
+        repo: pull.repo,
+        pull_number: pull.number,
+        commit_id: pull.sha,
+        event: 'COMMENT',
+        body: "@dependabot rebase",
+      })
+    }
+  }
+}
+
 yargs(hideBin(process.argv))
   .command('list', 'list PRs', () => {}, listPRs)
   .command('approve <repo> <number>', 'approve a PR', {
@@ -140,6 +171,7 @@ yargs(hideBin(process.argv))
     if ('getYargsCompletions' in argv) return
     return approvePR(argv)
   })
+  .command('rebase-behind', 'rebase PRs that are unmergeable because they are behind develop', () => {}, rebaseBehind)
   .completion('completion', 'output completion stuff', (_, { _: argv }) => {
     if (argv[1] === 'approve' && argv.length > 2) {
       if (argv.length === 3) {
