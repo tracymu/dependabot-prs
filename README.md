@@ -61,9 +61,6 @@ Paste this in your .zshrc (or whatever) to get autocompletion of
 #
 # yargs command completion script
 #
-# Installation: ../../.asdf/installs/nodejs/14.16.0/.npm/bin/dependabot-prs completion >> ~/.zshrc
-#    or ../../.asdf/installs/nodejs/14.16.0/.npm/bin/dependabot-prs completion >> ~/.zsh_profile on OSX.
-#
 _dependabot-prs_yargs_completions()
 {
   local reply
